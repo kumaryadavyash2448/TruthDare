@@ -1,0 +1,236 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Truth or Dare — Online</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:#0f1720;color:#e6eef8;padding:12px}
+    .card{background:#10202a;border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+    h1{margin:6px 0 12px;font-size:20px}
+    input,button,select,textarea{font-size:16px;padding:10px;border-radius:8px;border:1px solid #234; background:#08202a;color:#e6eef8}
+    button{cursor:pointer;background:#ff4d6d;border:none}
+    .small{font-size:13px;color:#bcd}
+    #playersList div{padding:6px;border-bottom:1px solid #123}
+    #chatBox{max-height:240px;overflow:auto;padding:6px;background:#061217;border-radius:8px}
+    .sys{color:#ffdf7a}
+    .me{color:#7ee7a6}
+    .msg{padding:6px;margin:6px 0;border-radius:8px;background:#071a20}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .center{display:flex;align-items:center;justify-content:center;gap:8px}
+    @media(min-width:720px){body{max-width:760px;margin:12px auto}}
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🎯 Truth or Dare — Online</h1>
+
+  <div id="lobby">
+    <div class="small">Create or join a room and share it with friends</div>
+    <div class="controls" style="margin-top:10px;">
+      <input id="nameInput" placeholder="Your name" />
+      <input id="roomInput" placeholder="Room ID (optional)" />
+      <button id="createBtn">Create Room</button>
+      <button id="joinBtn">Join Room</button>
+    </div>
+  </div>
+
+  <div id="gameUI" style="display:none">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between">
+        <div>
+          <b>Room:</b> <span id="roomIdSpan"></span><br>
+          <span class="small">You: <span id="myName"></span></span>
+        </div>
+        <div>
+          <button id="leaveBtn">Leave</button>
+          <button id="spinBtn">SPIN</button>
+        </div>
+      </div>
+
+      <hr style="border-color:#123;margin:10px 0">
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div style="flex:1">
+          <h3>Players</h3>
+          <div id="playersList"></div>
+        </div>
+
+        <div style="flex:2">
+          <h3 id="turnHeader">Spin the bottle 🎡</h3>
+          <div id="choiceArea" style="display:none" class="center">
+            <button id="truthBtn">Truth</button>
+            <button id="dareBtn">Dare</button>
+          </div>
+          <div id="resultArea"></div>
+        </div>
+      </div>
+
+      <hr style="border-color:#123;margin:10px 0">
+
+      <div>
+        <h3>Group Chat</h3>
+        <div id="chatBox"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input id="chatInput" placeholder="Type message" style="flex:1" />
+          <button id="sendChat">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+<script>
+/* ✅ YOUR FIREBASE CONFIG (ALREADY ADDED) */
+var firebaseConfig = {
+  apiKey: "AIzaSyD9-ogUtijsMNdL_p9nxy6x_fAY3ApSO30",
+  authDomain: "truthdaregame-84e31.firebaseapp.com",
+  databaseURL: "https://truthdaregame-84e31-default-rtdb.firebaseio.com",
+  projectId: "truthdaregame-84e31",
+  storageBucket: "truthdaregame-84e31.firebasestorage.app",
+  messagingSenderId: "185207310026",
+  appId: "1:185207310026:web:c28638c40ad68fe53d9633",
+  measurementId: "G-3270GCRF92"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+/* Game Data */
+const truths = [
+ "Who is your crush?",
+ "What is your biggest fear?",
+ "Most embarrassing moment?",
+ "Have you ever lied to your best friend?"
+];
+const dares = [
+ "Do 10 pushups",
+ "Sing a song",
+ "Dance for 20 seconds",
+ "Act like a monkey"
+];
+
+let myName="", roomId="", myKey="";
+
+/* UI */
+const nameInput=document.getElementById("nameInput");
+const roomInput=document.getElementById("roomInput");
+const gameUI=document.getElementById("gameUI");
+const lobby=document.getElementById("lobby");
+const myNameSpan=document.getElementById("myName");
+const roomIdSpan=document.getElementById("roomIdSpan");
+const playersList=document.getElementById("playersList");
+const turnHeader=document.getElementById("turnHeader");
+const choiceArea=document.getElementById("choiceArea");
+const resultArea=document.getElementById("resultArea");
+const chatBox=document.getElementById("chatBox");
+const chatInput=document.getElementById("chatInput");
+
+/* Buttons */
+document.getElementById("createBtn").onclick=createRoom;
+document.getElementById("joinBtn").onclick=joinRoom;
+document.getElementById("spinBtn").onclick=spin;
+document.getElementById("truthBtn").onclick=()=>choose("truth");
+document.getElementById("dareBtn").onclick=()=>choose("dare");
+document.getElementById("sendChat").onclick=sendChat;
+document.getElementById("leaveBtn").onclick=leaveRoom;
+
+/* Functions */
+function genRoom(){return Math.random().toString(36).substr(2,6).toUpperCase();}
+
+function createRoom(){
+  myName=nameInput.value.trim();
+  if(!myName)return alert("Enter name");
+  roomId=genRoom();
+  enterRoom();
+}
+
+function joinRoom(){
+  myName=nameInput.value.trim();
+  roomId=roomInput.value.trim().toUpperCase();
+  if(!myName||!roomId)return alert("Fill all fields");
+  enterRoom();
+}
+
+function enterRoom(){
+  myNameSpan.textContent=myName;
+  roomIdSpan.textContent=roomId;
+  lobby.style.display="none";
+  gameUI.style.display="block";
+
+  const ref=db.ref("rooms/"+roomId+"/players").push();
+  myKey=ref.key;
+  ref.set({name:myName});
+
+  listen();
+  systemMsg(myName+" joined");
+}
+
+function leaveRoom(){
+  db.ref("rooms/"+roomId+"/players/"+myKey).remove();
+  location.reload();
+}
+
+function listen(){
+  db.ref("rooms/"+roomId+"/players").on("value",s=>{
+    const d=s.val()||{};
+    playersList.innerHTML="";
+    Object.values(d).forEach(p=>{
+      let div=document.createElement("div");
+      div.textContent=p.name;
+      playersList.appendChild(div);
+    });
+  });
+
+  db.ref("rooms/"+roomId+"/turn").on("value",s=>{
+    const d=s.val();
+    if(!d){turnHeader.textContent="Spin the bottle 🎡";choiceArea.style.display="none";return;}
+
+    turnHeader.textContent=d.name+"'s turn";
+    if(d.key===myKey && !d.choice) choiceArea.style.display="flex";
+    else choiceArea.style.display="none";
+
+    if(d.question) resultArea.textContent=d.question;
+  });
+
+  db.ref("rooms/"+roomId+"/chat").on("child_added",s=>{
+    const m=s.val();
+    let div=document.createElement("div");
+    div.className="msg";
+    div.textContent=m;
+    chatBox.appendChild(div);
+    chatBox.scrollTop=chatBox.scrollHeight;
+  });
+}
+
+async function spin(){
+  const snap=await db.ref("rooms/"+roomId+"/players").once("value");
+  const data=snap.val()||{};
+  const keys=Object.keys(data);
+  const k=keys[Math.floor(Math.random()*keys.length)];
+  db.ref("rooms/"+roomId+"/turn").set({key:k,name:data[k].name});
+}
+
+async function choose(type){
+  const q=type==="truth"?truths[Math.floor(Math.random()*truths.length)]:dares[Math.floor(Math.random()*dares.length)];
+  db.ref("rooms/"+roomId+"/turn").update({choice:type,question:q});
+  systemMsg(myName+" chose "+type+": "+q);
+}
+
+function sendChat(){
+  const txt=chatInput.value.trim();
+  if(!txt)return;
+  db.ref("rooms/"+roomId+"/chat").push(myName+": "+txt);
+  chatInput.value="";
+}
+
+function systemMsg(msg){
+  db.ref("rooms/"+roomId+"/chat").push("🔔 "+msg);
+}
+</script>
+</body>
+</html>
